@@ -1,0 +1,15 @@
+# Secrets and tokens for AI-Life backend — NEVER commit
+.secrets/
+*.token.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Local DB
+*.sqlite
+*.sqlite3
+*.db

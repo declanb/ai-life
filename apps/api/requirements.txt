@@ -8,3 +8,8 @@ psycopg2-binary
 python-dotenv
 httpx
 pytest
+google-api-python-client
+google-auth
+google-auth-oauthlib
+sentry-sdk[fastapi]
+

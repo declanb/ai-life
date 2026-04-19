@@ -36,3 +36,9 @@ yarn-error.log*
 # Misc
 .DS_Store
 *.pem
+
+# AI-Life secrets (Google OAuth clients, tokens, local DB)
+apps/api/.secrets/
+**/*.token.json
+*.sqlite
+*.sqlite3
