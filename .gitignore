@@ -42,3 +42,7 @@ apps/api/.secrets/
 **/*.token.json
 *.sqlite
 *.sqlite3
+
+# AI-Life data & cache
+apps/api/.cache/
+apps/api/.data/

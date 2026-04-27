@@ -88,15 +88,49 @@ curl -X POST http://localhost:8000/api/v1/trips/demo-001/approve
 
 ### Transit
 
-Real-time Dublin Bus (via TFI GTFS-R) and Luas departures.
+Real-time Dublin Bus (via TFI GTFS-R) and Luas departures with **routine learning** and **proactive advising**.
 
-**Personalised commute endpoints:**
-- `GET /api/v1/transit/commute/to-work` - Coolock → Harcourt St (15/15A/15B buses)
+#### How Routine Learning Works
+
+The transit agent learns your habits over time:
+1. **Log events** (explicit or implicit) via `POST /transit/events` when you view or use a route
+2. **Recompute routines** via `POST /transit/routines/recompute` to cluster usage into patterns (stop×route×time-of-day×day-of-week)
+3. **Proactive suggestions** via `GET /transit/advise/now` returns "the 27 is N minutes away — leave now" cards based on active routines
+
+Routines are stored in SQLite (`apps/api/.data/ai_life.sqlite`) and seeded from `user_stops.py` on first boot.
+
+#### GTFS Static Cache
+
+Stop and route discovery uses the TFI GTFS static dataset:
+- **First use**: downloads ~50MB zip from transportforireland.ie, parses into SQLite
+- **Cache location**: `apps/api/.cache/gtfs/`
+- **Refresh**: `cd apps/api && python -m app.services.gtfs_static refresh` (or auto-refreshes after 30 days)
+
+#### Endpoints
+
+**Personalised commute (legacy — uses hardcoded stops):**
+- `GET /api/v1/transit/commute/to-work` - Coolock → Harcourt St (15/15A/15B/27 buses)
 - `GET /api/v1/transit/commute/to-home` - Harcourt St → Coolock (Luas Green Line from HAR/STS)
 
-Returns top 3 options with route, due time, and "leave at HH:MM" guidance (walk time included).
+**Discovery (GTFS static):**
+- `GET /api/v1/transit/stops/search?q=<name>` - Search stops by name
+- `GET /api/v1/transit/stops/near?lat=<lat>&lon=<lon>&radius=<meters>` - Find nearby stops
+- `GET /api/v1/transit/routes/{short_name}` - Get route details (e.g. /routes/27)
+- `GET /api/v1/transit/routes/{short_name}/stops` - Stops served by route
+- `GET /api/v1/transit/routes/{short_name}/status` - Live service alerts
 
-**Generic endpoints:**
+**Routines (learning):**
+- `POST /api/v1/transit/events` - Log a journey event (implicit/explicit)
+- `GET /api/v1/transit/routines` - List learned routines
+- `POST /api/v1/transit/routines` - Manually create a routine
+- `DELETE /api/v1/transit/routines/{id}` - Delete a routine
+- `POST /api/v1/transit/routines/recompute` - Re-cluster events into routines
+
+**Proactive advising:**
+- `GET /api/v1/transit/advise/now` - Next relevant departures for current time window
+- `GET /api/v1/transit/advise/route/{short_name}` - "Where's the 27?" — next departures across user's routine stops
+
+**Generic:**
 - `GET /api/v1/transit/bus/stop/{stop_id}` - Real-time Dublin Bus departures from any stop
 - `GET /api/v1/transit/luas/stop/{abbrev}` - Real-time Luas departures (e.g., HAR, STS, JER, TAL)
 - `GET /api/v1/transit/search?query=phibsborough` - Search for stops by name

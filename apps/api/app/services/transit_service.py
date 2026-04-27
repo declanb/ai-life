@@ -22,14 +22,18 @@ class TransitService:
     def _set_cache(self, key: str, data: any):
         self._cache[key] = (datetime.now(), data)
     
-    def get_bus_departures(self, stop_id: str) -> Dict:
+    def get_bus_departures(self, stop_id: str, route_short_name: Optional[str] = None) -> Dict:
         """
         Get real-time Dublin Bus departures using TFI GTFS-Realtime API.
         
         Fetches TripUpdates feed, filters StopTimeUpdates for the given stop_id,
         returns sorted departures with route, destination, and due times.
+        
+        Args:
+            stop_id: TFI stop ID
+            route_short_name: Optional route filter (e.g. "27", "15A") for faster lookup
         """
-        cache_key = f"bus_{stop_id}"
+        cache_key = f"bus_{stop_id}_{route_short_name or 'all'}"
         cached = self._get_cached(cache_key)
         if cached:
             return cached
@@ -56,11 +60,21 @@ class TransitService:
                 departures = []
                 now = datetime.now(timezone.utc)
                 
+                # Build route_id → short_name map from GTFS static if available
+                route_map = self._get_route_short_name_map()
+                
                 for entity in entities:
                     trip_update = entity.get("trip_update", {})
                     trip = trip_update.get("trip", {})
                     route_id = trip.get("route_id", "")
                     trip_id = trip.get("trip_id", "")
+                    
+                    # Resolve route short name
+                    short_name = route_map.get(route_id, route_id.split("-")[-1] if "-" in route_id else route_id)
+                    
+                    # Apply route filter if specified
+                    if route_short_name and short_name.upper() != route_short_name.upper():
+                        continue
                     
                     stop_time_updates = trip_update.get("stop_time_update", [])
                     
@@ -85,7 +99,7 @@ class TransitService:
                                 headsign = trip.get("trip_headsign", trip_id)
                                 
                                 departure = {
-                                    "route": route_id.split("-")[-1] if "-" in route_id else route_id,
+                                    "route": short_name,
                                     "destination": headsign,
                                     "due_minutes": "Due" if due_minutes == 0 else str(due_minutes),
                                     "scheduled": target_dt.isoformat(),
@@ -388,3 +402,149 @@ class TransitService:
             "recommendation": recommendation,
             "walk_minutes": walk_minutes
         }
+    
+    def _get_route_short_name_map(self) -> Dict[str, str]:
+        """
+        Build route_id → short_name map from GTFS static data.
+        Cached for 5 minutes.
+        """
+        cache_key = "route_map"
+        cached = self._get_cached(cache_key)
+        if cached:
+            return cached
+        
+        try:
+            from app.services.gtfs_static import _get_db
+            db = _get_db()
+            cur = db.execute("SELECT route_id, route_short_name FROM routes")
+            route_map = {row[0]: row[1] for row in cur.fetchall() if row[1]}
+            self._set_cache(cache_key, route_map)
+            return route_map
+        except Exception as e:
+            print(f"[TransitService] Could not load route map: {e}")
+            return {}
+    
+    def get_route_status(self, route_short_name: str) -> Dict:
+        """
+        Check GTFS-R ServiceAlerts for disruptions on a specific route.
+        Returns: {"route", "alerts": [{"header", "description", "effect"}]}
+        """
+        if not self.tfi_api_key:
+            return {"route": route_short_name, "alerts": [], "error": "TFI_API_KEY not configured"}
+        
+        url = f"{self.tfi_gtfsr_base}/ServiceAlerts"
+        params = {"format": "json"}
+        headers = {"x-api-key": self.tfi_api_key}
+        
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(url, params=params, headers=headers)
+                response.raise_for_status()
+                data = response.json()
+                
+                alerts = []
+                route_map = self._get_route_short_name_map()
+                
+                for entity in data.get("entity", []):
+                    alert = entity.get("alert", {})
+                    informed_entities = alert.get("informed_entity", [])
+                    
+                    for ie in informed_entities:
+                        route_id = ie.get("route_id", "")
+                        short_name = route_map.get(route_id, route_id.split("-")[-1] if "-" in route_id else route_id)
+                        
+                        if short_name.upper() == route_short_name.upper():
+                            header_text = alert.get("header_text", {}).get("translation", [{}])[0].get("text", "Alert")
+                            desc_text = alert.get("description_text", {}).get("translation", [{}])[0].get("text", "")
+                            effect = alert.get("effect", "UNKNOWN_EFFECT")
+                            
+                            alerts.append({
+                                "header": header_text,
+                                "description": desc_text,
+                                "effect": effect
+                            })
+                            break
+                
+                return {"route": route_short_name, "alerts": alerts}
+        
+        except Exception as e:
+            print(f"[TransitService] Error fetching alerts for route {route_short_name}: {e}")
+            return {"route": route_short_name, "alerts": [], "error": str(e)}
+    
+    def next_relevant_departures(self, now_utc: Optional[datetime] = None, window_minutes: int = 30) -> List[Dict]:
+        """
+        Proactive advisor: get next departures for all active routines in the current time window.
+        
+        Returns approval-card shaped dicts:
+        [{"title", "body", "action_at", "leave_at", "route", "stop_id", "due_minutes", "confidence"}]
+        
+        Sorted by: urgency (soonest leave_at first), then confidence DESC.
+        """
+        if now_utc is None:
+            now_utc = datetime.now(timezone.utc)
+        
+        from app.services.routines import get_active_routines_for_time
+        
+        active_routines = get_active_routines_for_time(now_utc)
+        if not active_routines:
+            return []
+        
+        candidates = []
+        
+        for routine in active_routines:
+            mode = routine["mode"]
+            stop_id = routine["stop_id"]
+            route = routine.get("route")
+            stop_name = routine.get("stop_name", stop_id)
+            confidence = routine.get("confidence", 0.5)
+            
+            # Fetch live departures
+            if mode == "luas":
+                deps_data = self.get_luas_departures(stop_id)
+            else:
+                deps_data = self.get_bus_departures(stop_id, route_short_name=route)
+            
+            departures = deps_data.get("departures", [])
+            
+            # Filter by route if specified in routine
+            if route:
+                departures = [d for d in departures if route.upper() in d["route"].upper()]
+            
+            # Take next 2 departures within window
+            for dep in departures[:2]:
+                due_str = dep["due_minutes"]
+                
+                if due_str == "Due":
+                    due_minutes = 0
+                elif due_str.isdigit():
+                    due_minutes = int(due_str)
+                else:
+                    continue
+                
+                if due_minutes > window_minutes:
+                    continue
+                
+                # Assume 5 min walk (could be enhanced with routine-specific walk time)
+                walk_minutes = 5
+                leave_in = max(0, due_minutes - walk_minutes)
+                leave_at = now_utc + timedelta(minutes=leave_in)
+                
+                title = f"{dep['route']} to {dep['destination']} in {due_minutes} min"
+                body = f"Leave by {leave_at.strftime('%H:%M')} — {walk_minutes} min walk from {stop_name}"
+                
+                candidates.append({
+                    "title": title,
+                    "body": body,
+                    "action_at": leave_at.isoformat(),
+                    "leave_at": leave_at.isoformat(),
+                    "route": dep["route"],
+                    "stop_id": stop_id,
+                    "stop_name": stop_name,
+                    "due_minutes": due_minutes,
+                    "confidence": confidence,
+                    "mode": mode
+                })
+        
+        # Sort: soonest leave_at first, then highest confidence
+        candidates.sort(key=lambda c: (c["leave_at"], -c["confidence"]))
+        return candidates

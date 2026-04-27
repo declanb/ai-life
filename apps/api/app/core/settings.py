@@ -10,7 +10,7 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-API_ROOT = Path(__file__).resolve().parent.parent  # apps/api
+API_ROOT = Path(__file__).resolve().parent.parent.parent  # apps/api (from app/core/settings.py)
 SECRETS_DIR = API_ROOT / ".secrets"
 
 
@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     ]
 
     # Google OAuth / Calendar
+    # NOTE: Photos scopes intentionally omitted from this token. When photos
+    # features are wired, give Photos its own token file/CLI bootstrap rather
+    # than co-mingling scopes here — least-privilege + independent failure domains.
     google_oauth_client_file: Path = SECRETS_DIR / "google_oauth_client.json"
     google_oauth_token_file: Path = SECRETS_DIR / "google_oauth_token.json"
     google_oauth_scopes: list[str] = [
@@ -41,13 +44,37 @@ class Settings(BaseSettings):
     # If blank, the service will create an "AI-Life — Travel" calendar on first run and populate this.
     ai_life_travel_calendar_id: Optional[str] = None
 
-    # OAuth bootstrap loopback port
+    # OAuth bootstrap loopback port (configurable to avoid conflicts)
     oauth_loopback_port: int = 8765
 
-    # Observability — Sentry
-    sentry_dsn: Optional[str] = None
-    sentry_traces_sample_rate: float = 0.1
-    sentry_profiles_sample_rate: float = 0.1
+    # Work locations for commute planning (address substrings or place names)
+    work_locations: list[str] = [
+        "Harcourt",
+        "Harcourt St",
+        "Harcourt Street",
+        "Dublin 2",
+    ]
+
+    # Data directory for SQLite, cache, non-secret local state
+    ai_life_data_dir: Path = API_ROOT / ".data"
+
+    # Spotify OAuth / Playback Control
+    spotify_oauth_client_file: Path = SECRETS_DIR / "spotify_oauth_client.json"
+    spotify_oauth_token_file: Path = SECRETS_DIR / "spotify_oauth_token.json"
+    spotify_oauth_scopes: list[str] = [
+        "user-read-playback-state",      # Read current playback state
+        "user-modify-playback-state",    # Control playback (play/pause/skip/volume)
+        "user-read-currently-playing",   # See what's currently playing
+        "playlist-read-private",         # Access user's playlists
+        "user-read-private",             # Basic profile info
+        "user-top-read",                 # Top artists/tracks (for context-aware recommendations)
+        "user-read-recently-played",     # Recently played tracks
+    ]
+
+    # Home Assistant integration (local network by default)
+    # URL to your Home Assistant instance, e.g. "http://homeassistant.local:8123"
+    home_assistant_url: Optional[str] = None
+    home_assistant_token_file: Path = SECRETS_DIR / "home_assistant_token.txt"
 
 
     @field_validator("cors_allow_origins", mode="before")

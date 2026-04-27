@@ -1,0 +1,56 @@
+{
+  "seen_canonical_ids": [
+    "daft-north-wall-quay-1bed-2400",
+    "dng-custom-house-sq-studio-1950",
+    "myhome-mayor-square-1bed-2300",
+    "sherryfitz-castleforbes-2bed-2500"
+  ],
+  "events": [
+    {
+      "at": "2026-04-25T22:59:42.567933+00:00",
+      "new_ids": [
+        "daft-north-wall-quay-1bed-2400",
+        "dng-custom-house-sq-studio-1950",
+        "myhome-mayor-square-1bed-2300",
+        "sherryfitz-castleforbes-2bed-2500"
+      ],
+      "gone_ids": [],
+      "total_listings": 4,
+      "sources": {
+        "daft": {
+          "ok": false,
+          "count": 0
+        },
+        "url_paste": {
+          "ok": true,
+          "count": 0
+        },
+        "fixtures": {
+          "ok": true,
+          "count": 5
+        }
+      }
+    },
+    {
+      "at": "2026-04-25T22:59:42.657958+00:00",
+      "new_ids": [],
+      "gone_ids": [],
+      "total_listings": 4,
+      "sources": {
+        "daft": {
+          "ok": false,
+          "count": 0
+        },
+        "url_paste": {
+          "ok": true,
+          "count": 0
+        },
+        "fixtures": {
+          "ok": true,
+          "count": 5
+        }
+      }
+    }
+  ],
+  "last_run_at": "2026-04-25T22:59:42.657958+00:00"
+}

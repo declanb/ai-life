@@ -32,12 +32,40 @@ Based on your prompt, we are dividing the assistant's responsibilities into two 
 
 ---
 
-## 2. What we are EXCLUDING (The Boundaries)
-To ensure the agent remains a purely personal, stress-reducing assistant, the following are strictly disconnected:
-*   ❌ Work emails, calendars, and tasks.
-*   ❌ Financial transactions, banking, and active bill payment (though it can *remind* you of a renewal).
-*   ❌ Grocery shopping and meal prep.
+## 2. Guardrails & Boundaries
+
+### 2.1 Hard scope rule: PERSONAL ONLY
+**AI-Life is a personal-life system. It does not connect to, read from, write to, or automate any work or employer/client account — ever.**
+
+*   ❌ **EY** — no email, calendar, Teams, OneDrive, SharePoint, Concur (as a work tool), or any EY-issued account.
+*   ❌ **Airnova** — no Airnova accounts, data, or systems of any kind.
+*   ❌ Any other current or future employer / client work account.
+*   ❌ No work credentials, OAuth tokens, or API keys are ever stored in this repo or its services.
+
+**The single allowed overlap — work *trips*, read-only, one-way, into personal:**
+Work **travel itineraries** (flights, trains, hotels, dates, destinations) are in scope as personal-life context — the user is physically away, the home needs to react (vacation mode, lights, climate), and the family needs visibility. They get mirrored into the personal calendar (e.g. an "AI-Life — Travel" Google Calendar) and feed Home Assistant routines.
+
+Constraints on this overlap:
+*   Source must be a **personal channel** — a forwarded confirmation email landing in personal Gmail, a personal Concur export the user drops in, or similar. Never a direct OAuth into a work system.
+*   **Trip metadata only** — dates, locations, transport, accommodation. Not work meeting subjects, attendees, agendas, documents, or any work content beyond what's needed to know "user is in city X from date A to date B".
+*   **One-way**, into personal. No data ever flows back to any work system.
+
+### 2.2 Automation posture: maximum autonomy with revertible side-effects
+The user wants to automate as much as possible. Default policy:
+
+*   **Auto-execute (no approval card):** read-only ingestion, summarisation, classification, calendar mirroring, photo organisation, renewal *detection*, and pre-blessed Home Assistant routines (lights, climate, scenes, vacation/away mode).
+*   **Approval Card required (irreversible / external side-effect):** cancelling subscriptions, sending email on the user's behalf, arming/disarming security, unlocking doors, moving money, deleting photos or files, or **any first-time action against a new vendor**.
+*   **Always:** server-side audit log of what ran, when, why, and which approval (if any) authorised it.
+
+### 2.3 Other excluded domains
+*   ❌ Financial *transactions* / active bill payment (read-only analysis & renewal detection are fine).
 *   ❌ Auto-replying to WhatsApp, iMessage, or personal texts.
+
+### 2.4 Shopping — propose-only, never auto-checkout
+**Shopping (groceries + non-grocery) is in scope as propose-only automation.** Specialist agents (`Groceries Shopper`, `Personal Shopper`) build baskets, compare retailers, apply loyalty/offers, and surface ready-to-approve proposals via approval cards. **The user always places the actual order** — no auto-checkout, no storing payment credentials.
+
+*   ✅ In scope: basket building, price comparison, restock detection, gift planning, delivery-slot strategy, loyalty optimisation.
+*   ❌ Out of scope: placing/amending/cancelling real orders, storing passwords/payment details, meal *cooking* (meal planning that feeds a grocery basket is fine).
 
 ---
 

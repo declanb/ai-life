@@ -19,5 +19,11 @@
             "src": "/(.*)",
             "dest": "apps/web/$1"
         }
+    ],
+    "crons": [
+        {
+            "path": "/api/v1/property-finder/cron/refresh",
+            "schedule": "0 8 * * *"
+        }
     ]
 }

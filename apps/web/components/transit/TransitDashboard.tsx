@@ -46,9 +46,23 @@ interface SavedStop {
     type: 'bus' | 'luas';
 }
 
+interface ProactiveSuggestion {
+    title: string;
+    body: string;
+    action_at: string;
+    leave_at: string;
+    route: string;
+    stop_id: string;
+    stop_name: string;
+    due_minutes: number;
+    confidence: number;
+    mode: 'bus' | 'luas';
+}
+
 export default function TransitDashboard() {
     const [commuteToWork, setCommuteToWork] = useState<CommuteData | null>(null);
     const [commuteToHome, setCommuteToHome] = useState<CommuteData | null>(null);
+    const [proactiveSuggestion, setProactiveSuggestion] = useState<ProactiveSuggestion | null>(null);
     const [stops, setStops] = useState<SavedStop[]>([
         { id: "334", name: "Phibsborough", type: "bus" },
         { id: "JER", name: "Jervis", type: "luas" }
@@ -97,9 +111,44 @@ export default function TransitDashboard() {
         }
     };
 
+    const fetchProactiveSuggestion = async () => {
+        try {
+            const res = await fetch('/api/v1/transit/advise/now');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.suggestions && data.suggestions.length > 0) {
+                    setProactiveSuggestion(data.suggestions[0]);
+                } else {
+                    setProactiveSuggestion(null);
+                }
+            }
+        } catch (err: any) {
+            console.error("Error fetching proactive suggestion:", err);
+        }
+    };
+
+    const logJourney = async (option: CommuteOption) => {
+        try {
+            await fetch('/api/v1/transit/events', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mode: option.mode,
+                    route_short_name: option.route,
+                    stop_id: option.stop_id,
+                    stop_name: option.stop_name,
+                    direction: option.destination,
+                    source: 'explicit'
+                })
+            });
+        } catch (err: any) {
+            console.error("Error logging journey:", err);
+        }
+    };
+
     const refreshAll = async () => {
         setLoading(true);
-        await Promise.all([fetchCommuteData(), fetchDepartures()]);
+        await Promise.all([fetchCommuteData(), fetchDepartures(), fetchProactiveSuggestion()]);
         setLastUpdate(new Date());
         setSecondsSinceUpdate(0);
         setLoading(false);
@@ -173,6 +222,12 @@ export default function TransitDashboard() {
                                         <div className="text-xs text-gray-500 truncate">
                                             → {opt.destination}
                                         </div>
+                                        <button
+                                            onClick={() => logJourney(opt)}
+                                            className="mt-2 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-gray-400 text-xs hover:bg-white/10 hover:text-white transition-all"
+                                        >
+                                            Log this journey
+                                        </button>
                                     </div>
                                     <div className="text-right flex-shrink-0">
                                         <div className={`text-3xl font-black ${
@@ -207,7 +262,7 @@ export default function TransitDashboard() {
 
     return (
         <div className="p-6 max-w-6xl mx-auto mt-8">
-            <div className="flex justify-between items-center mb-12 bg-white/5 p-8 rounded-3xl border border-white/10 backdrop-blur-2xl">
+            <div className="flex justify-between items-center mb-8 bg-white/5 p-8 rounded-3xl border border-white/10 backdrop-blur-2xl">
                 <div>
                     <h2 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-green-400 via-blue-400 to-purple-400">
                         Dublin Transit
@@ -223,6 +278,33 @@ export default function TransitDashboard() {
                     Refresh Now
                 </button>
             </div>
+
+            {proactiveSuggestion && (
+                <div className="mb-8 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 rounded-3xl border-2 border-yellow-500/30 backdrop-blur-xl p-6 shadow-xl shadow-yellow-500/10">
+                    <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="text-2xl">⚡</span>
+                                <h3 className="text-lg font-bold text-yellow-400">Now</h3>
+                            </div>
+                            <div className="text-white font-semibold text-xl mb-1">
+                                {proactiveSuggestion.title}
+                            </div>
+                            <div className="text-gray-300 text-sm">
+                                {proactiveSuggestion.body}
+                            </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                            <div className="text-4xl font-black text-yellow-400">
+                                {proactiveSuggestion.due_minutes}
+                            </div>
+                            <div className="text-xs text-gray-400 font-medium">
+                                min
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="space-y-6 mb-12">
                 <h3 className="text-2xl font-bold text-white px-2">Your Commute</h3>
@@ -341,5 +423,4 @@ export default function TransitDashboard() {
             </section>
         </div>
     );
-}
 }
